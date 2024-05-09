@@ -12,6 +12,8 @@ var (
 	ErrEmptyType = errors.New("empty redis type")
 	// ErrEmptyKey is an error that indicates no redis key is set.
 	ErrEmptyKey = errors.New("empty redis key")
+	// ErrEmptyClientManager is an error that indicates no redis client manager is set.
+	ErrEmptyClientManager = errors.New("empty redis client manager")
 )
 
 type (

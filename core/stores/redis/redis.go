@@ -59,6 +59,8 @@ type (
 		tls   bool
 		brk   breaker.Breaker
 		hooks []red.Hook
+
+		clientManager ClientManager
 	}
 
 	// RedisNode interface represents a redis node.
@@ -102,7 +104,11 @@ func MustNewRedis(conf RedisConf, opts ...Option) *Redis {
 // New returns a Redis with given options.
 // Deprecated: use MustNewRedis or NewRedis instead.
 func New(addr string, opts ...Option) *Redis {
-	return newRedis(addr, opts...)
+	r := newRedis(addr, opts...)
+	if r.clientManager == nil {
+		r.clientManager = defaultClientManager
+	}
+	return r
 }
 
 // NewRedis returns a Redis with given options.
@@ -122,6 +128,11 @@ func NewRedis(conf RedisConf, opts ...Option) (*Redis, error) {
 	}
 
 	rds := newRedis(conf.Host, opts...)
+
+	if rds.clientManager == nil {
+		return nil, ErrEmptyClientManager
+	}
+
 	if !conf.NonBlock {
 		if err := rds.checkConnection(conf.PingTimeout); err != nil {
 			return nil, errorx.Wrap(err, fmt.Sprintf("redis connect error, addr: %s", conf.Host))
@@ -136,6 +147,8 @@ func newRedis(addr string, opts ...Option) *Redis {
 		Addr: addr,
 		Type: NodeType,
 		brk:  breaker.NewBreaker(),
+
+		clientManager: defaultClientManager,
 	}
 
 	for _, opt := range opts {
@@ -2371,6 +2384,13 @@ func withHook(hook red.Hook) Option {
 	}
 }
 
+// WithClientManager customizes the given Redis with given clientManager.
+func WithClientManager(clientManager ClientManager) Option {
+	return func(r *Redis) {
+		r.clientManager = clientManager
+	}
+}
+
 func acceptable(err error) bool {
 	return err == nil || errorx.In(err, red.Nil, context.Canceled)
 }
@@ -2380,7 +2400,7 @@ func getRedis(r *Redis) (RedisNode, error) {
 	case ClusterType:
 		return getCluster(r)
 	case NodeType:
-		return getClient(r)
+		return r.clientManager.GetClient(r)
 	default:
 		return nil, fmt.Errorf("redis type '%s' is not supported", r.Type)
 	}
